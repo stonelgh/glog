@@ -37,7 +37,8 @@
 //
 // By default, all log statements write to files in a temporary directory.
 // This package provides several flags that modify this behavior.
-// As a result, flag.Parse must be called before any logging is done.
+// As a result, either flag.Parse or Initialize must be called before any
+// logging is done.
 //
 //	-logtostderr=false
 //		Logs are written to standard error instead of to files.
@@ -396,6 +397,7 @@ type flushSyncWriter interface {
 }
 
 func init() {
+	flag.StringVar(&logging.dir, "log_dir", "", "If non-empty, write log files in this directory")
 	flag.BoolVar(&logging.toStderr, "logtostderr", false, "log to standard error instead of files")
 	flag.BoolVar(&logging.alsoToStderr, "alsologtostderr", false, "log to standard error as well as files")
 	flag.Var(&logging.verbosity, "v", "log level for V logs")
@@ -415,8 +417,36 @@ func Flush() {
 	logging.lockAndFlushAll()
 }
 
+// Config collects all of configurable logging setup
+type Config struct {
+	Dir             string
+	ToStderr        bool
+	AlsoToStderr    bool
+	StderrThreshold int
+	TraceLocation   string
+	Vmodule         string
+	Verbosity       int
+}
+
+// either flag.Parse or this function should be called before any logging is done
+func Initialize(cfg Config) {
+	logging.dir = cfg.Dir
+	logging.toStderr = cfg.ToStderr
+	logging.alsoToStderr = cfg.AlsoToStderr
+	logging.stderrThreshold = severity(cfg.StderrThreshold)
+	logging.traceLocation.Set(cfg.TraceLocation)
+	logging.vmodule.Set(cfg.Vmodule)
+	logging.verbosity = Level(cfg.Verbosity)
+
+	logging.initialized = true
+}
+
 // loggingT collects all the global state of the logging setup.
 type loggingT struct {
+	// If non-empty, overrides the choice of directory in which to write logs.
+	// See createLogDirs for the full list of possible destinations.
+	dir string
+
 	// Boolean flags. Not handled atomically because the flag.Value interface
 	// does not let us avoid the =true, and that shorthand is necessary for
 	// compatibility. TODO: does this matter enough to fix? Seems unlikely.
@@ -453,6 +483,9 @@ type loggingT struct {
 	// safely using atomic.LoadInt32.
 	vmodule   moduleSpec // The state of the -vmodule flag.
 	verbosity Level      // V logging level, the value of the -v flag/
+
+	// set by Initialize
+	initialized bool
 }
 
 // buffer holds a byte Buffer for reuse. The zero value is ready for use.
@@ -676,7 +709,7 @@ func (l *loggingT) output(s severity, buf *buffer, file string, line int, alsoTo
 		}
 	}
 	data := buf.Bytes()
-	if !flag.Parsed() {
+	if !(logging.initialized || flag.Parsed()) {
 		os.Stderr.Write([]byte("ERROR: logging before flag.Parse: "))
 		os.Stderr.Write(data)
 	} else if l.toStderr {
