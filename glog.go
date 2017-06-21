@@ -441,6 +441,20 @@ func Initialize(cfg Config) {
 	logging.initialized = true
 }
 
+func ApplyOnTheFly(verbosity int, vmodule string) (err error) {
+	if verbosity != -1 {
+		logging.verbosity = Level(verbosity)
+	}
+	if vmodule != "-" {
+		err = logging.vmodule.Set(vmodule)
+	}
+	return
+}
+
+func GetCurrentConfig() (verbosity int, vmodule string) {
+	return int(logging.verbosity), logging.vmodule.String()
+}
+
 // loggingT collects all the global state of the logging setup.
 type loggingT struct {
 	// If non-empty, overrides the choice of directory in which to write logs.
