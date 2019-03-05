@@ -815,6 +815,13 @@ func stacks(all bool) []byte {
 		trace = make([]byte, n)
 		nbytes := runtime.Stack(trace, all)
 		if nbytes < len(trace) {
+			if n := strings.LastIndex(string(trace[:nbytes]), "github.com/stonelgh/glog"); n >= 0 {
+				if n := strings.LastIndexByte(string(trace[:n]), '\n'); n >= 0 {
+					if n := strings.LastIndexByte(string(trace[:n]), '\n'); n >= 0 {
+						return trace[n+1 : nbytes]
+					}
+				}
+			}
 			return trace[:nbytes]
 		}
 		n *= 2
